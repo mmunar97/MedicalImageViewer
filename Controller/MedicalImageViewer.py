@@ -14,6 +14,7 @@ class MedicalImageViewer:
 
         self.__root_view, self.__view = show_gui(self.medical_image_listener)
         self.__view.start()
+        self.__view.mainloop()
         self.__root_view.mainloop()
 
     def medical_image_listener(self, action_code: ListenerCode, **kwargs):
@@ -43,5 +44,13 @@ class MedicalImageViewer:
             metadata = self.__model.get_file_metadata()
             if metadata is not None:
                 self.__view.show_image_metadata(metadata)
-
+        elif action_code == ListenerCode.START_CINEMA_MODE:
+            selected_radio_button = kwargs['selected_radio_button']
+            self.__model.start_cinema_mode(selected_radio_button)
+            print("H")
+        elif action_code == ListenerCode.PRINT_IMAGE_SLICE:
+            image = kwargs['image']
+            index = kwargs['index']
+            self.__view.set_image(image)
+            self.__view.set_slider_value(index)
 

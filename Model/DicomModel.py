@@ -2,6 +2,7 @@ import numpy
 import pydicom
 import threading
 from Controller.ListenerCode import ListenerCode
+from time import sleep
 from typing import Any, Callable, List
 
 
@@ -80,5 +81,22 @@ class DicomModel(threading.Thread):
             return retrieve_metadata(dataset=self.__dicom_image)
         else:
             return None
+
+    def start_cinema_mode(self, axis: int):
+        """
+
+        Args:
+            axis:
+
+        Returns:
+
+        """
+        if self.__dicom_image is not None:
+            range_limit = self.get_range(axis)
+            for i in range(range_limit):
+                sleep(0.1)
+                print("HOLA")
+                self.__listener(ListenerCode.PRINT_IMAGE_SLICE, image=self.get_slice_image(axis, i), index=i)
+
 
 

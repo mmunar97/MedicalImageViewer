@@ -72,7 +72,7 @@ class MainView(tk.Frame, threading.Thread):
 
         # SLICES COMPONENTS
         self.__slices_label = Label(self.__root_view,
-                                    text="SLICE SETTINGS",
+                                    text="SLICE VIEWER",
                                     font='System 14 bold',
                                     bg=self.tool_panel_background_color)
         self.__slices_label.pack()
@@ -120,6 +120,33 @@ class MainView(tk.Frame, threading.Thread):
         self.__slider.pack()
         self.__slider.place(x=920, y=65)
         self.__slider.configure(state='disabled')
+
+        self.__cinema_mode = Label(self.__root_view,
+                                   text="CINEMA MODE",
+                                   font='System 14 bold',
+                                   bg=self.tool_panel_background_color)
+        self.__cinema_mode.pack()
+        self.__cinema_mode.place(x=920, y=120)
+
+        self.__cinema_mode_play_image = ImageTk.PhotoImage(
+            Image.open("View/Assets/play.png").resize((30, 30), Image.BICUBIC))
+        self.__cinema_mode_play_button = Button(self.__root_view,
+                                                text="   Start animating ",
+                                                image=self.__cinema_mode_play_image,
+                                                compound="left",
+                                                command=self.start_cinema_mode)
+        self.__cinema_mode_play_button.pack()
+        self.__cinema_mode_play_button.place(x=930, y=150)
+
+        self.__cinema_mode_stop_image = ImageTk.PhotoImage(
+            Image.open("View/Assets/stop.png").resize((30, 30), Image.BICUBIC))
+        self.__cinema_mode_stop_button = Button(self.__root_view,
+                                                text="   Stop animating ",
+                                                image=self.__cinema_mode_stop_image,
+                                                compound="left",
+                                                command=None)
+        self.__cinema_mode_stop_button.pack()
+        self.__cinema_mode_stop_button.place(x=930, y=190)
 
         # ADD SEPARATOR
         self.__tool_frame = Frame(self.__root_view, bg=self.tool_panel_background_color, width=900, height=2)
@@ -185,6 +212,7 @@ class MainView(tk.Frame, threading.Thread):
                                              interpolation=cv2.INTER_AREA)
         self.__loaded_image = PIL.ImageTk.PhotoImage(image=PIL.Image.fromarray(self.__loaded_image_raw))
         self.__image_view.itemconfig(self.__loaded_image_view, image=self.__loaded_image)
+        self.__root_view.update()
 
     def initial_view_data(self, z_axis_range: int):
         """
@@ -209,6 +237,17 @@ class MainView(tk.Frame, threading.Thread):
         """
         self.__slider.configure(from_=0, to=range, state='active')
 
+    def set_slider_value(self, value: int):
+        """
+        Sets the value of the slider
+
+        Args:
+            value: An integer, representing the value of the slider.
+        """
+        print(value)
+        self.__slider_value.set(value)
+        self.__root_view.update()
+
     def radio_button_did_switch(self):
         """
         Detects an event in the radio button group that manages the different perspectives.
@@ -229,6 +268,13 @@ class MainView(tk.Frame, threading.Thread):
         self.__listener(ListenerCode.SLICE_VIEW_DID_CHANGE,
                         selected_radio_button=self.__radio_button_value.get(),
                         slider_value=self.__slider_value.get())
+
+    def start_cinema_mode(self):
+        """
+        Starts the cinema mode in the viewer.
+        """
+        self.__listener(ListenerCode.START_CINEMA_MODE,
+                        selected_radio_button=self.__radio_button_value.get())
 
 
 def show_gui(listener: Callable[[ListenerCode, Any], None]) -> Tuple[Tk, MainView]:

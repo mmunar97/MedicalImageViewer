@@ -1,5 +1,6 @@
 from Controller.ListenerCode import ListenerCode
 from Model.DicomModel import DicomModel
+from Model.ImageQualityIndicators import compute_quality_indicators
 from View.GUI import show_gui
 
 
@@ -34,23 +35,31 @@ class MedicalImageViewer:
             self.__view.set_image(image)
             self.__view.initial_view_data(z_axis_range=z_axis_range)
         elif action_code == ListenerCode.SLICE_VIEW_DID_CHANGE:
-            selected_radio_button, slider_value = kwargs['selected_radio_button'], kwargs['slider_value']
+            selected_radio_button, slider_value, noise_threshold = kwargs['selected_radio_button'], kwargs['slider_value'], kwargs['noise_threshold']
             image = self.__model.get_slice_image(selected_radio_button, slider_value)
-            range = self.__model.get_range(selected_radio_button)
+            image_range = self.__model.get_range(selected_radio_button)
+            self.__view.set_image_quality_indicator(compute_quality_indicators(image.astype('float64'),
+                                                                               noise_threshold))
 
             self.__view.set_image(image)
-            self.__view.set_slider_range(range)
+            self.__view.set_slider_range(image_range)
         elif action_code == ListenerCode.SHOW_IMAGE_METADATA:
             metadata = self.__model.get_file_metadata()
             if metadata is not None:
                 self.__view.show_image_metadata(metadata)
         elif action_code == ListenerCode.START_CINEMA_MODE:
             selected_radio_button = kwargs['selected_radio_button']
-            self.__model.start_cinema_mode(selected_radio_button)
-            print("H")
+            noise_threshold = kwargs['noise_threshold']
+            self.__model.start_cinema_mode(selected_radio_button,
+                                           noise_threshold)
+        elif action_code == ListenerCode.STOP_CINEMA_MODE:
+            self.__model.stop_cinema_mode()
         elif action_code == ListenerCode.PRINT_IMAGE_SLICE:
             image = kwargs['image']
             index = kwargs['index']
+            quality_image = kwargs['quality_indicator']
+
             self.__view.set_image(image)
             self.__view.set_slider_value(index)
+            self.__view.set_image_quality_indicator(quality_image)
 

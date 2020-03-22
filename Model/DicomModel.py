@@ -5,6 +5,8 @@ from Controller.ListenerCode import ListenerCode
 from time import sleep
 from typing import Any, Callable, List
 
+from Model.ImageQualityIndicators import compute_quality_indicators
+
 
 class DicomModel(threading.Thread):
 
@@ -13,6 +15,7 @@ class DicomModel(threading.Thread):
 
         self.__dicom_image = None
         self.__listener = listener
+        self.__cinema_mode_enabled = False
 
     def load_dicom_image(self, path: str):
         """
@@ -82,21 +85,32 @@ class DicomModel(threading.Thread):
         else:
             return None
 
-    def start_cinema_mode(self, axis: int):
+    def start_cinema_mode(self, axis: int, noise_threshold: int):
         """
+        Starts the cinema mode of the loaded file, showing the different slices in the selected axis.
 
         Args:
-            axis:
-
-        Returns:
-
+            axis: An integer, representing the axis to show.
         """
-        if self.__dicom_image is not None:
+        self.__cinema_mode_enabled = True
+        if self.__dicom_image is not None and self.__cinema_mode_enabled:
             range_limit = self.get_range(axis)
             for i in range(range_limit):
+                if not self.__cinema_mode_enabled:
+                    break
                 sleep(0.1)
-                print("HOLA")
-                self.__listener(ListenerCode.PRINT_IMAGE_SLICE, image=self.get_slice_image(axis, i), index=i)
+
+                self.__listener(ListenerCode.PRINT_IMAGE_SLICE,
+                                image=self.get_slice_image(axis, i),
+                                index=i,
+                                quality_indicator=compute_quality_indicators(self.get_slice_image(axis, i).astype('float64'),
+                                                                             noise_threshold))
+
+    def stop_cinema_mode(self):
+        """
+        Stops the cinema mode.
+        """
+        self.__cinema_mode_enabled = False
 
 
 

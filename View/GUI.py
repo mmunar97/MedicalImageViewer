@@ -1,20 +1,20 @@
 import cv2
 import numpy
 import threading
-import tkinter as tk
 import PIL
 
 from Controller.ListenerCode import ListenerCode
 from tkinter import *
 from tkinter import filedialog
-from typing import Any, Callable, List, Tuple
+from typing import Any, Callable, List
 from PIL import Image, ImageTk
 
+from Model.ImageQualityIndicators import ImageQualityIndicators
+from View.GuiBuilder.Layouts.ImageQualityLayout import *
 from View.ImageMetadataView import ImageMetadataView
 
 
 class MainView(tk.Frame, threading.Thread):
-
     tool_panel_background_color = "#999999"
 
     def __init__(self, root_view: tk.Tk, listener: Callable[[ListenerCode, Any], None], *args, **kwargs):
@@ -33,7 +33,8 @@ class MainView(tk.Frame, threading.Thread):
         self.__listener = listener
 
         # BUTTON 1: LOAD IMAGE
-        self.__load_image_button_image = ImageTk.PhotoImage(Image.open("View/Assets/open_file.png").resize((40, 40), Image.BICUBIC))
+        self.__load_image_button_image = ImageTk.PhotoImage(
+            Image.open("View/Assets/open_file.png").resize((40, 40), Image.BICUBIC))
         self.__load_image_button = Button(self.__root_view,
                                           text="   Read DICOM image   ",
                                           image=self.__load_image_button_image,
@@ -45,7 +46,7 @@ class MainView(tk.Frame, threading.Thread):
         # BUTTON 2: SHOW IMAGE METADATA
         self.__show_image_metadata_button_image = ImageTk.PhotoImage(
             Image.open("View/Assets/explore_metadata.png").resize((40, 40),
-                                                                 Image.BICUBIC))
+                                                                  Image.BICUBIC))
 
         self.__show_image_metadata_button = Button(self.__root_view,
                                                    text="   Show image metadata   ",
@@ -57,7 +58,7 @@ class MainView(tk.Frame, threading.Thread):
 
         # BUTTON 3: EXIT PROGRAM
         self.__exit_button_image = ImageTk.PhotoImage(Image.open("View/Assets/logout.png").resize((40, 40),
-                                                                                                 Image.BICUBIC))
+                                                                                                  Image.BICUBIC))
         self.__exit_button = Button(self.__root_view,
                                     text="   Exit   ",
                                     image=self.__exit_button_image,
@@ -144,9 +145,20 @@ class MainView(tk.Frame, threading.Thread):
                                                 text="   Stop animating ",
                                                 image=self.__cinema_mode_stop_image,
                                                 compound="left",
-                                                command=None)
+                                                command=self.stop_cinema_mode)
         self.__cinema_mode_stop_button.pack()
         self.__cinema_mode_stop_button.place(x=930, y=190)
+
+        self.__image_quality_indicators = build_image_quality_title(self.__root_view)
+
+        self.__noise_threshold_selector = build_image_quality_threshold_label(self.__root_view)
+        self.__noise_threshold_selector_value = build_image_quality_threshold_entry(self.__root_view)
+
+        self.__image_quality_power_title,  self.__image_quality_power_value = build_image_quality_power(self.__root_view)
+        self.__image_quality_contrast_title, self.__image_quality_contrast_value = build_image_quality_contrast(self.__root_view)
+        self.__image_quality_noise_power_title, self.__image_quality_noise_power_value = build_image_quality_noise_power(self.__root_view)
+        self.__image_quality_snr_title, self.__image_quality_snr_value = build_image_quality_snr(self.__root_view)
+        self.__image_quality_cnr_title, self.__image_quality_cnr_value = build_image_quality_cnr(self.__root_view)
 
         # ADD SEPARATOR
         self.__tool_frame = Frame(self.__root_view, bg=self.tool_panel_background_color, width=900, height=2)
@@ -154,8 +166,8 @@ class MainView(tk.Frame, threading.Thread):
 
         # ADD IMAGE CANVAS
         self.__loaded_image_raw = cv2.resize(cv2.imread("View/Assets/waiting.png"),
-                                         (875, 610),
-                                         interpolation=cv2.INTER_AREA)
+                                             (875, 610),
+                                             interpolation=cv2.INTER_AREA)
         self.__loaded_image = PIL.ImageTk.PhotoImage(image=PIL.Image.fromarray(self.__loaded_image_raw))
 
         self.__image_view = tk.Canvas(self.__root_view, width=875, height=610)
@@ -214,6 +226,22 @@ class MainView(tk.Frame, threading.Thread):
         self.__image_view.itemconfig(self.__loaded_image_view, image=self.__loaded_image)
         self.__root_view.update()
 
+    def set_image_quality_indicator(self, quality_indicators: ImageQualityIndicators):
+        """
+        Sets the quality indicator of the image.
+
+        Args:
+            quality_indicators: An ImageQualityIndicators object, containing the different indicators.
+
+        """
+        self.__image_quality_power_value.config(text=str(round(quality_indicators.get_power(), 2)))
+        self.__image_quality_contrast_value.config(text=str(round(quality_indicators.get_contrast(), 2)))
+        self.__image_quality_noise_power_value.config(text=str(round(quality_indicators.get_noise_power(), 2)))
+        self.__image_quality_snr_value.config(text=str(round(quality_indicators.get_noise_power(), 2)))
+        self.__image_quality_cnr_value.config(text=str(round(quality_indicators.get_noise_power(), 2)))
+
+        self.__root_view.update()
+
     def initial_view_data(self, z_axis_range: int):
         """
         Sets the initial data when an image is loaded.
@@ -244,7 +272,6 @@ class MainView(tk.Frame, threading.Thread):
         Args:
             value: An integer, representing the value of the slider.
         """
-        print(value)
         self.__slider_value.set(value)
         self.__root_view.update()
 
@@ -267,14 +294,27 @@ class MainView(tk.Frame, threading.Thread):
         """
         self.__listener(ListenerCode.SLICE_VIEW_DID_CHANGE,
                         selected_radio_button=self.__radio_button_value.get(),
-                        slider_value=self.__slider_value.get())
+                        slider_value=self.__slider_value.get(),
+                        noise_threshold=int(self.__noise_threshold_selector_value.get()))
 
     def start_cinema_mode(self):
         """
         Starts the cinema mode in the viewer.
         """
+        noise_threshold = 300
+        try:
+            noise_threshold = int(self.__noise_threshold_selector_value.get())
+        except:
+            pass
         self.__listener(ListenerCode.START_CINEMA_MODE,
-                        selected_radio_button=self.__radio_button_value.get())
+                        selected_radio_button=self.__radio_button_value.get(),
+                        noise_threshold=noise_threshold)
+
+    def stop_cinema_mode(self):
+        """
+        Stops the cinema mode in the viewer.
+        """
+        self.__listener(ListenerCode.STOP_CINEMA_MODE)
 
 
 def show_gui(listener: Callable[[ListenerCode, Any], None]) -> Tuple[Tk, MainView]:

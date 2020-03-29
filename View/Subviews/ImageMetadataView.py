@@ -15,8 +15,8 @@ class ImageMetadataView(tk.Frame, threading.Thread):
         columns_labels = ('Index', 'Attribute', 'Value')
 
         table_view = ttk.Treeview(self.__root_view,
-                               columns=columns_labels,
-                               show='headings')
+                                  columns=columns_labels,
+                                  show='headings')
 
         for col in columns_labels:
             table_view.heading(col, text=col)

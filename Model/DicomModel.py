@@ -3,9 +3,9 @@ import pydicom
 import threading
 from Controller.ListenerCode import ListenerCode
 from time import sleep
-from typing import Any, Callable, List
+from typing import Any, Callable, List, Tuple
 
-from Model.ImageQualityIndicators import compute_quality_indicators
+from Model.ImageQualityIndicators import compute_quality_indicators, ImageQualityIndicators
 
 
 class DicomModel(threading.Thread):
@@ -17,6 +17,8 @@ class DicomModel(threading.Thread):
         self.__listener = listener
         self.__cinema_mode_enabled = False
 
+        self.__contrast_settings: Tuple[int, int] = (0, 0)
+
     def load_dicom_image(self, path: str):
         """
         Loads a DICOM image from the selected path.
@@ -27,7 +29,12 @@ class DicomModel(threading.Thread):
         self.__dicom_image = pydicom.dcmread(path)
         self.__listener(ListenerCode.DID_LOAD_IMAGE,
                         image=self.__dicom_image.pixel_array[:, :, 0],
-                        z_axis_range=self.get_range(2))
+                        z_axis_range=self.get_range(2),
+                        contrast_range=(self.__dicom_image.pixel_array[:, :, :].min(),
+                                        self.__dicom_image.pixel_array[:, :, :].max()))
+
+        self.__contrast_settings = (self.__dicom_image.pixel_array[:, :, :].min(),
+                                    self.__dicom_image.pixel_array[:, :, :].max())
 
     def get_slice_image(self, axis: int, index: int) -> numpy.ndarray:
         """
@@ -41,11 +48,11 @@ class DicomModel(threading.Thread):
             An image, represented as a numpy array.
         """
         if axis == 0:
-            return self.__dicom_image.pixel_array[index, :, :]
+            return self.compute_contrast(self.__dicom_image.pixel_array[index, :, :])
         elif axis == 1:
-            return self.__dicom_image.pixel_array[:, index, :]
+            return self.compute_contrast(self.__dicom_image.pixel_array[:, index, :])
         elif axis == 2:
-            return self.__dicom_image.pixel_array[:, :, index]
+            return self.compute_contrast(self.__dicom_image.pixel_array[:, :, index])
 
     def get_range(self, axis: int):
         """
@@ -85,12 +92,22 @@ class DicomModel(threading.Thread):
         else:
             return None
 
+    def get_pixel_values(self) -> Tuple[float, float]:
+        """
+        Returns the tuple of two elements containing the conversion between pixel and millimeters.
+        """
+        pixel_size = []
+        for element in self.__dicom_image[0x0028, 0x0030].value:
+            pixel_size.append(float(element))
+        return tuple(pixel_size)
+
     def start_cinema_mode(self, axis: int, noise_threshold: int):
         """
         Starts the cinema mode of the loaded file, showing the different slices in the selected axis.
 
         Args:
             axis: An integer, representing the axis to show.
+            noise_threshold: An integer, representing the threshold for which the pixels are considered as noise.
         """
         self.__cinema_mode_enabled = True
         if self.__dicom_image is not None and self.__cinema_mode_enabled:
@@ -112,5 +129,42 @@ class DicomModel(threading.Thread):
         """
         self.__cinema_mode_enabled = False
 
+    def show_quality_indicators(self, axis: int, index: int, noise_threshold: int) -> ImageQualityIndicators:
+        """
+        Shows the quality indicators.
 
+        Args:
+            axis: An integer, representing the axis to show.
+            index: An integer, representing the index of the image in the axis.
+            noise_threshold: An integer, representing the threshold for which the pixels are considered as noise.
 
+        Returns:
+
+        """
+        if self.__dicom_image is not None:
+            image = self.get_slice_image(axis, index).astype('float64')
+            return compute_quality_indicators(image, noise_threshold)
+
+    def set_contrast_range(self, contrast_range: Tuple[int, int]):
+        """
+        Updates the contrast range.
+        """
+        self.__contrast_settings = contrast_range
+
+    def compute_contrast(self, image: numpy.ndarray) -> numpy.ndarray:
+        """
+        Modifies the image to be scaled according to the contrast.
+
+        Args:
+            image: An image, represented as a numpy array.
+
+        Returns:
+            The modified image, represented as a numpy array.
+        """
+        modified_image = image.copy()
+
+        #modified_image = (modified_image-self.__contrast_settings[0])*self.__contrast_settings[1]/(self.__contrast_settings[1]-self.__contrast_settings[0])
+        modified_image[image <= self.__contrast_settings[0]] = self.__contrast_settings[0]
+        modified_image[image >= self.__contrast_settings[1]] = self.__contrast_settings[1]
+
+        return modified_image

@@ -4,6 +4,7 @@ import numpy
 class ImageQualityIndicators:
 
     def __init__(self,
+                 well_defined: bool,
                  power: float,
                  contrast: float,
                  noise_power: float,
@@ -13,17 +14,28 @@ class ImageQualityIndicators:
         Initializes the object that stores the indicators of quality of a medical image.
 
         Args:
+            well_defined: A boolean, indicating if the indicator is well defined using the threshold.
             power: The power of the signal.
             contrast: The contrast of the signal.
             noise_power: The power of the noise present in the image.
             snr: The Signal-to-Noise ratio of the image.
             cnr: The Contrast-to-Noise ratio of the image.
         """
+        self.__well_defined = well_defined
         self.__power = power
         self.__contrast = contrast
         self.__noise_power = noise_power
         self.__snr = snr
         self.__cnr = cnr
+
+    def is_well_defined(self) -> bool:
+        """
+        Gets if the indicators are well defined using the selected threshold level.
+
+        Returns:
+            A boolean, indicating if the indicators are well defined.
+        """
+        return self.__well_defined
 
     def get_power(self) -> float:
         """
@@ -85,11 +97,9 @@ def compute_quality_indicators(image: numpy.ndarray, noise_threshold: int) -> Im
         snr = compute_signal_noise_ratio(signal_power, noise_power)
         cnr = compute_contrast_noise_ratio(signal_contrast, noise_power)
 
-        return ImageQualityIndicators(signal_power, signal_contrast, noise_power, snr, cnr)
+        return ImageQualityIndicators(True, signal_power, signal_contrast, noise_power, snr, cnr)
     except:
-        return ImageQualityIndicators(0, 0, 0, 0, 0)
-
-
+        return ImageQualityIndicators(False, 0, 0, 0, 0, 0)
 
 
 def compute_noise_power(image: numpy.ndarray, noise_threshold: int) -> float:
@@ -148,7 +158,7 @@ def compute_signal_noise_ratio(signal_power: float, noise_power: float) -> float
     Returns:
         A float value, representing the signal-to-noise ratio of the image.
     """
-    return numpy.sqrt(signal_power/noise_power)
+    return numpy.sqrt(signal_power / noise_power)
 
 
 def compute_contrast_noise_ratio(signal_contrast: float, noise_power: float) -> float:
@@ -162,4 +172,4 @@ def compute_contrast_noise_ratio(signal_contrast: float, noise_power: float) -> 
     Returns:
         A float value, representing the contrast-to-noise ratio of the image.
     """
-    return signal_contrast/numpy.sqrt(noise_power)
+    return signal_contrast / numpy.sqrt(noise_power)

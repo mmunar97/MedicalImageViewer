@@ -1,17 +1,21 @@
 import cv2
 import numpy
 import threading
+import tkinter as tk
 import PIL
 
 from Controller.ListenerCode import ListenerCode
 from tkinter import *
 from tkinter import filedialog
-from typing import Any, Callable, List
+from typing import Any, Callable, List, Tuple
 from PIL import Image, ImageTk
 
 from Model.ImageQualityIndicators import ImageQualityIndicators
-from View.GuiBuilder.Layouts.ImageQualityLayout import *
-from View.ImageMetadataView import ImageMetadataView
+from View.GuiBuilder.Layouts.MainView import ImageQualityLayout, ContrastAdjustmentLayout
+from View.Subviews.ImageMetadataView import ImageMetadataView
+from View.Subviews.MeasureDistanceView import MeasureDistanceView
+from View.Subviews.ProjectionsView import ProjectionsView
+from View.Subviews.ZoomView.ZoomView import ZoomView
 
 
 class MainView(tk.Frame, threading.Thread):
@@ -30,13 +34,13 @@ class MainView(tk.Frame, threading.Thread):
         tk.Frame.__init__(self, *args, **kwargs)
 
         self.__root_view = root_view
-        self.__listener = listener
+        self.listener = listener
 
         # BUTTON 1: LOAD IMAGE
         self.__load_image_button_image = ImageTk.PhotoImage(
             Image.open("View/Assets/open_file.png").resize((40, 40), Image.BICUBIC))
         self.__load_image_button = Button(self.__root_view,
-                                          text="   Read DICOM image   ",
+                                          text="   Read DICOM   ",
                                           image=self.__load_image_button_image,
                                           compound="left",
                                           command=self.open_file_dialog)
@@ -49,14 +53,63 @@ class MainView(tk.Frame, threading.Thread):
                                                                   Image.BICUBIC))
 
         self.__show_image_metadata_button = Button(self.__root_view,
-                                                   text="   Show image metadata   ",
+                                                   text="   Show metadata   ",
                                                    image=self.__show_image_metadata_button_image,
                                                    compound="left",
                                                    command=self.load_image_metadata)
         self.__show_image_metadata_button.pack()
-        self.__show_image_metadata_button.place(x=220, y=10)
+        self.__show_image_metadata_button.place(x=160, y=10)
+        self.__show_image_metadata_button.configure(state='disabled')
 
-        # BUTTON 3: EXIT PROGRAM
+        # BUTTON 3: MEASURE DISTANCES
+        self.__measure_distance_button_image = ImageTk.PhotoImage(
+            Image.open("View/Assets/measure_distance.png").resize((40, 40),
+                                                                  Image.BICUBIC))
+        self.__measure_distance_button = Button(self.__root_view,
+                                                text="    Measure distance   ",
+                                                image=self.__measure_distance_button_image,
+                                                compound="left",
+                                                command=self.show_measure_distance_view)
+        self.__measure_distance_button.pack()
+        self.__measure_distance_button.place(x=325, y=10)
+        self.__measure_distance_button.configure(state='disabled')
+
+        self.__measure_distance_root_view = None
+        self.__measure_distance_view = None
+
+        # BUTTON 4: ZOOM
+        self.__zoom_button_image = ImageTk.PhotoImage(
+            Image.open("View/Assets/zoom.png").resize((40, 40),
+                                                      Image.BICUBIC))
+        self.__zoom_button = Button(self.__root_view,
+                                    text="    Zoom  ",
+                                    image=self.__zoom_button_image,
+                                    compound="left",
+                                    command=self.show_zoom_view)
+        self.__zoom_button.pack()
+        self.__zoom_button.place(x=505, y=10)
+        self.__zoom_button.configure(state='disabled')
+
+        self.__zoom_root_view = None
+        self.__zoom_view = None
+
+        # BUTTON 5: PROJECTIONS
+        # self.__projections_button_image = ImageTk.PhotoImage(
+        #     Image.open("View/Assets/projections.png").resize((40, 40),
+        #                                                      Image.BICUBIC))
+        # self.__projections_button = Button(self.__root_view,
+        #                                    text="    Projections  ",
+        #                                    image=self.__projections_button_image,
+        #                                    compound="left",
+        #                                    command=self.show_projections_view)
+        # self.__projections_button.pack()
+        # self.__projections_button.place(x=610, y=10)
+        # self.__projections_button.configure(state='disabled')
+        #
+        # self.__projections_root_view = None
+        # self.__projections_view = None
+
+        # BUTTON 5: EXIT PROGRAM
         self.__exit_button_image = ImageTk.PhotoImage(Image.open("View/Assets/logout.png").resize((40, 40),
                                                                                                   Image.BICUBIC))
         self.__exit_button = Button(self.__root_view,
@@ -65,7 +118,7 @@ class MainView(tk.Frame, threading.Thread):
                                     compound="left",
                                     command=self.quit)
         self.__exit_button.pack()
-        self.__exit_button.place(x=450, y=10)
+        self.__exit_button.place(x=610, y=10)
 
         # CREATE TOOL FRAME
         self.__tool_frame = Frame(self.__root_view, bg=self.tool_panel_background_color, width=300, height=700)
@@ -110,17 +163,17 @@ class MainView(tk.Frame, threading.Thread):
         self.__radio_button_z_axis.place(x=1080, y=40)
         self.__radio_button_z_axis.configure(state='disabled')
 
-        self.__slider_value = IntVar()
-        self.__slider = Scale(self.__root_view,
-                              from_=0, to=42,
-                              orient=HORIZONTAL,
-                              bg=self.tool_panel_background_color,
-                              variable=self.__slider_value,
-                              command=self.slider_value_did_change,
-                              length=250)
-        self.__slider.pack()
-        self.__slider.place(x=920, y=65)
-        self.__slider.configure(state='disabled')
+        self.__slice_slider_value = IntVar()
+        self.slice_slider = Scale(self.__root_view,
+                                  from_=0, to=42,
+                                  orient=HORIZONTAL,
+                                  bg=self.tool_panel_background_color,
+                                  variable=self.__slice_slider_value,
+                                  command=self.slider_value_did_change,
+                                  length=250)
+        self.slice_slider.pack()
+        self.slice_slider.place(x=920, y=65)
+        self.slice_slider.configure(state='disabled')
 
         self.__cinema_mode = Label(self.__root_view,
                                    text="CINEMA MODE",
@@ -149,16 +202,46 @@ class MainView(tk.Frame, threading.Thread):
         self.__cinema_mode_stop_button.pack()
         self.__cinema_mode_stop_button.place(x=930, y=190)
 
-        self.__image_quality_indicators = build_image_quality_title(self.__root_view)
+        # Quality indicators section
+        self.__image_quality_indicators = ImageQualityLayout.build_image_quality_title(self.__root_view)
 
-        self.__noise_threshold_selector = build_image_quality_threshold_label(self.__root_view)
-        self.__noise_threshold_selector_value = build_image_quality_threshold_entry(self.__root_view)
+        self.__noise_threshold_selector = ImageQualityLayout.build_image_quality_threshold_label(self.__root_view)
+        self.__noise_threshold_selector_value = ImageQualityLayout.build_image_quality_threshold_entry(self.__root_view)
+        self.__noise_threshold_selector_value.bind('<Return>', self.threshold_enter_did_change_value)
 
-        self.__image_quality_power_title,  self.__image_quality_power_value = build_image_quality_power(self.__root_view)
-        self.__image_quality_contrast_title, self.__image_quality_contrast_value = build_image_quality_contrast(self.__root_view)
-        self.__image_quality_noise_power_title, self.__image_quality_noise_power_value = build_image_quality_noise_power(self.__root_view)
-        self.__image_quality_snr_title, self.__image_quality_snr_value = build_image_quality_snr(self.__root_view)
-        self.__image_quality_cnr_title, self.__image_quality_cnr_value = build_image_quality_cnr(self.__root_view)
+        self.__image_quality_power_title, self.__image_quality_power_value = ImageQualityLayout.build_image_quality_power(
+            self.__root_view)
+        self.__image_quality_contrast_title, self.__image_quality_contrast_value = ImageQualityLayout.build_image_quality_contrast(
+            self.__root_view)
+        self.__image_quality_noise_power_title, self.__image_quality_noise_power_value = ImageQualityLayout.build_image_quality_noise_power(
+            self.__root_view)
+        self.__image_quality_snr_title, self.__image_quality_snr_value = ImageQualityLayout.build_image_quality_snr(
+            self.__root_view)
+        self.__image_quality_cnr_title, self.__image_quality_cnr_value = ImageQualityLayout.build_image_quality_cnr(
+            self.__root_view)
+
+        # Contrast adjustment section
+        self.__contrast_adjustment_title = ContrastAdjustmentLayout.build_contrast_adjustment_title(self.__root_view)
+
+        self.__contrast_adjustment_lower_bound_title = \
+            ContrastAdjustmentLayout.build_contrast_selector_subtitle(root_view=self.__root_view,
+                                                                      label_title="Lower bound",
+                                                                      origin=(920, 520))
+        self.__contrast_adjustment_lower_bound_value, self.__contrast_adjustment_lower_bound_slider = \
+            ContrastAdjustmentLayout.build_contrast_selector_slider(root_view=self.__root_view,
+                                                                    sliding_range=(0, 100),
+                                                                    command=self.contrast_sliders_did_change_value,
+                                                                    coordinates=(920, 540))
+
+        self.__contrast_adjustment_upper_bound_title = \
+            ContrastAdjustmentLayout.build_contrast_selector_subtitle(root_view=self.__root_view,
+                                                                      label_title="Upper bound",
+                                                                      origin=(920, 590))
+        self.__contrast_adjustment_upper_bound_value, self.__contrast_adjustment_upper_bound_slider = \
+            ContrastAdjustmentLayout.build_contrast_selector_slider(root_view=self.__root_view,
+                                                                    sliding_range=(0, 100),
+                                                                    command=self.contrast_sliders_did_change_value,
+                                                                    coordinates=(920, 610))
 
         # ADD SEPARATOR
         self.__tool_frame = Frame(self.__root_view, bg=self.tool_panel_background_color, width=900, height=2)
@@ -184,7 +267,7 @@ class MainView(tk.Frame, threading.Thread):
                                               title="Select a file",
                                               filetypes=(("DICOM files", "*.dcm"), ("All files", "*.*")))
         if filename != "":
-            self.__listener(ListenerCode.DID_PICKED_IMAGE, file=filename)
+            self.listener(ListenerCode.DID_PICKED_IMAGE, file=filename)
 
     def quit(self):
         """
@@ -196,7 +279,7 @@ class MainView(tk.Frame, threading.Thread):
         """
         Loads the metadata of the image
         """
-        self.__listener(ListenerCode.SHOW_IMAGE_METADATA)
+        self.listener(ListenerCode.SHOW_IMAGE_METADATA)
 
     @staticmethod
     def show_image_metadata(image_metadata: List[List[str]]):
@@ -206,7 +289,7 @@ class MainView(tk.Frame, threading.Thread):
         Args:
             image_metadata: A list, containing lists with the key-value information.
         """
-        image_metadata_root_view = tk.Tk()
+        image_metadata_root_view = tk.Toplevel()
         image_metadata_root_view.resizable(False, False)
         image_metadata_root_view.title("Image metadata")
         _ = ImageMetadataView(image_metadata_root_view, image_metadata)
@@ -234,36 +317,57 @@ class MainView(tk.Frame, threading.Thread):
             quality_indicators: An ImageQualityIndicators object, containing the different indicators.
 
         """
-        self.__image_quality_power_value.config(text=str(round(quality_indicators.get_power(), 2)))
-        self.__image_quality_contrast_value.config(text=str(round(quality_indicators.get_contrast(), 2)))
-        self.__image_quality_noise_power_value.config(text=str(round(quality_indicators.get_noise_power(), 2)))
-        self.__image_quality_snr_value.config(text=str(round(quality_indicators.get_noise_power(), 2)))
-        self.__image_quality_cnr_value.config(text=str(round(quality_indicators.get_noise_power(), 2)))
+        if quality_indicators.is_well_defined():
+            self.__image_quality_power_value.config(text=str(round(quality_indicators.get_power(), 2)))
+            self.__image_quality_contrast_value.config(text=str(round(quality_indicators.get_contrast(), 2)))
+            self.__image_quality_noise_power_value.config(text=str(round(quality_indicators.get_noise_power(), 2)))
+            self.__image_quality_snr_value.config(text=str(round(quality_indicators.get_signal_noise_ratio(), 2)))
+            self.__image_quality_cnr_value.config(text=str(round(quality_indicators.get_contrast_noise_ratio(), 2)))
+        else:
+            self.__image_quality_power_value.config(text="UNDEF")
+            self.__image_quality_contrast_value.config(text="UNDEF")
+            self.__image_quality_noise_power_value.config(text="UNDEF")
+            self.__image_quality_snr_value.config(text="UNDEF")
+            self.__image_quality_cnr_value.config(text="UNDEF")
 
         self.__root_view.update()
 
-    def initial_view_data(self, z_axis_range: int):
+    def initial_view_data(self, z_axis_range: int, contrast_range: Tuple[int, int]):
         """
         Sets the initial data when an image is loaded.
 
         Args:
             z_axis_range: An integer, representing the range of the Z axis in the DICOM image.
+            contrast_range: A Tuple of two elements, containing the range of the sliders.
         """
+        self.__show_image_metadata_button.configure(state='active')
+        self.__measure_distance_button.configure(state='active')
+        self.__zoom_button.configure(state='active')
+        #self.__projections_button.configure(state='active')
+
         self.__radio_button_x_axis.configure(state='active')
         self.__radio_button_y_axis.configure(state='active')
         self.__radio_button_z_axis.configure(state='active')
         self.__radio_button_value.set(2)
 
-        self.set_slider_range(z_axis_range)
+        self.set_slider_range(slider=self.slice_slider, sliding_range=(0, z_axis_range))
+        self.set_slider_range(slider=self.__contrast_adjustment_lower_bound_slider,
+                              sliding_range=contrast_range)
+        self.set_slider_range(slider=self.__contrast_adjustment_upper_bound_slider,
+                              sliding_range=contrast_range)
 
-    def set_slider_range(self, range: int):
+        self.__contrast_adjustment_upper_bound_value.set(contrast_range[1])
+        self.__contrast_adjustment_lower_bound_value.set(contrast_range[0])
+
+    def set_slider_range(self, slider: tk.Scale, sliding_range: Tuple[int, int]):
         """
         Sets the range of the slider
 
         Args:
-            range: An integer, representing the range of the slider.
+            slider: A tk.Scale object.
+            sliding_range: A tuple of two elements, representing the range of the slider.
         """
-        self.__slider.configure(from_=0, to=range, state='active')
+        slider.configure(from_=sliding_range[0], to=sliding_range[1], state='active')
 
     def set_slider_value(self, value: int):
         """
@@ -272,14 +376,14 @@ class MainView(tk.Frame, threading.Thread):
         Args:
             value: An integer, representing the value of the slider.
         """
-        self.__slider_value.set(value)
+        self.__slice_slider_value.set(value)
         self.__root_view.update()
 
     def radio_button_did_switch(self):
         """
         Detects an event in the radio button group that manages the different perspectives.
         """
-        self.__slider_value.set(0)
+        self.__slice_slider_value.set(0)
         self.slice_event()
 
     def slider_value_did_change(self, _):
@@ -292,10 +396,10 @@ class MainView(tk.Frame, threading.Thread):
         """
         Manages the events in the radio buttons and the slider.
         """
-        self.__listener(ListenerCode.SLICE_VIEW_DID_CHANGE,
-                        selected_radio_button=self.__radio_button_value.get(),
-                        slider_value=self.__slider_value.get(),
-                        noise_threshold=int(self.__noise_threshold_selector_value.get()))
+        self.listener(ListenerCode.SLICE_VIEW_DID_CHANGE,
+                      selected_radio_button=self.__radio_button_value.get(),
+                      slider_value=self.__slice_slider_value.get(),
+                      noise_threshold=int(self.__noise_threshold_selector_value.get()))
 
     def start_cinema_mode(self):
         """
@@ -306,15 +410,84 @@ class MainView(tk.Frame, threading.Thread):
             noise_threshold = int(self.__noise_threshold_selector_value.get())
         except:
             pass
-        self.__listener(ListenerCode.START_CINEMA_MODE,
-                        selected_radio_button=self.__radio_button_value.get(),
-                        noise_threshold=noise_threshold)
+        self.listener(ListenerCode.CINEMA_MODE_WILL_START,
+                      selected_radio_button=self.__radio_button_value.get(),
+                      noise_threshold=noise_threshold)
 
     def stop_cinema_mode(self):
         """
         Stops the cinema mode in the viewer.
         """
-        self.__listener(ListenerCode.STOP_CINEMA_MODE)
+        self.listener(ListenerCode.CINEMA_MODE_WILL_STOP)
+
+    def threshold_enter_did_change_value(self, _):
+        """
+        Detects that the threshold value has changed.
+        """
+        try:
+            value = int(self.__noise_threshold_selector_value.get())
+        except:
+            value = 300
+        self.__noise_threshold_selector_value.delete(0, 'end')
+        self.__noise_threshold_selector_value.insert(0, str(value))
+        self.listener(ListenerCode.NOISE_THRESHOLD_DID_CHANGE,
+                      threshold=int(self.__noise_threshold_selector_value.get()),
+                      axis=self.__radio_button_value.get(),
+                      slider_value=self.__slice_slider_value.get())
+
+    def contrast_sliders_did_change_value(self, _):
+        """
+        Detects an event in the sliders that manages the value of the contrast.
+        """
+        if self.__contrast_adjustment_lower_bound_value.get() > self.__contrast_adjustment_upper_bound_value.get():
+            self.__contrast_adjustment_lower_bound_value.set(self.__contrast_adjustment_upper_bound_value.get() - 1)
+        self.listener(ListenerCode.CONTRAST_VALUE_DID_CHANGE,
+                      contrast_range=(self.__contrast_adjustment_lower_bound_value.get(),
+                                        self.__contrast_adjustment_upper_bound_value.get()))
+
+    def show_measure_distance_view(self, pixel_size: Tuple[float, float] = None):
+        """
+        Shows the measure distance view.
+
+        If pixel_size is not loaded, the controller is called in order to retrieve the distance.
+
+        Args:
+            pixel_size: A tuple of two elements, representing the correspondence of 1 pixel in millimeters. Contains
+                        the equivalence by rows and by columns.
+        """
+        if pixel_size is None:
+            self.listener(ListenerCode.SHOW_DISTANCE_TOOLS)
+        else:
+            self.__measure_distance_root_view = tk.Toplevel(self.__root_view)
+            self.__measure_distance_root_view.resizable(False, False)
+            self.__measure_distance_root_view.title("Measure distance")
+            self.__measure_distance_view = MeasureDistanceView(self.__measure_distance_root_view,
+                                                               self,
+                                                               self.__loaded_image_raw,
+                                                               pixel_size)
+            self.__measure_distance_root_view.geometry("1180x615+70+70")
+
+    def show_zoom_view(self):
+        """
+        Shows the zoom view.
+        """
+        self.__zoom_root_view = tk.Toplevel(self.__root_view)
+        self.__zoom_root_view.resizable(False, False)
+        self.__zoom_root_view.title("Zoom")
+        self.__zoom_view = ZoomView(self.__zoom_root_view,
+                                    self.__loaded_image_raw)
+        self.__zoom_root_view.geometry("1180x615+70+70")
+
+    def show_projections_view(self):
+        """
+        Shows the projections view.
+        """
+        self.__projections_root_view = tk.Toplevel(self.__root_view)
+        self.__projections_root_view.resizable(False, False)
+        self.__projections_root_view.title("Projections")
+        self.__projections_view = ProjectionsView(self.__projections_root_view,
+                                                  self.__loaded_image_raw)
+        self.__projections_root_view.geometry("1180x615+70+70")
 
 
 def show_gui(listener: Callable[[ListenerCode, Any], None]) -> Tuple[Tk, MainView]:
